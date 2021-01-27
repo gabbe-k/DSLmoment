@@ -32,19 +32,8 @@ newtype Set = S [Set]
 eval :: Eq v => Table v -> TERM v -> Set
 eval t Empty = S []
 eval t (Sing v) = S [ eval t v ]
-eval t (s1 `U` s2) = f eq
-    where f True = eval t s1
-          f False = convSet (eval t s1) (eval t s2) (++)
-          eq = eval t s1 == eval t s2
-
-
-
-eval t (s1 `I` s2) = f eq
-    where f True = eval t s1
-          f False = convSet (eval t s1) (eval t s2) intersect
-          eq = eval t s1 == eval t s2
-
-
+eval t (s1 `U` s2) = mergeSet (eval t s1) (eval t s2) (++)
+eval t (s1 `I` s2) = mergeSet (eval t s1) (eval t s2) intersect
 eval t (Var v) = fromJust (lookup v t)
 
 
@@ -61,6 +50,12 @@ check t (Not p)              = not (check t p)
 --------------------------Helper funcs
 convSet :: Set -> Set -> ([Set] -> [Set] -> [Set]) -> Set
 convSet (S a1) (S a2) op = S (a1 `op` a2)
+
+mergeSet :: Set -> Set -> ([Set] -> [Set] -> [Set]) -> Set
+mergeSet s1@(S a1) s2@(S a2) op = f eq
+    where f True = s1
+          f False = S (a1 `op` a2)
+          eq = s1 == s2
 
 sub :: Set -> Set -> Bool
 sub (S a1) (S a2) = and [e `elem` a2 | e <- a1]
