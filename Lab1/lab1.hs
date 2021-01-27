@@ -32,7 +32,7 @@ newtype Set = S [Set]
 eval :: Eq v => Table v -> TERM v -> Set
 eval t Empty = S []
 eval t (Sing v) = S [ eval t v ]
-eval t (s1 `U` s2) = mergeSet (eval t s1) (eval t s2) (++)
+eval t (s1 `U` s2) = mergeSet (eval t s1) (eval t s2) (uniqueAdd)
 eval t (s1 `I` s2) = mergeSet (eval t s1) (eval t s2) intersect
 eval t (Var v) = fromJust (lookup v t)
 
@@ -48,8 +48,9 @@ check t (Implies p1 p2)      = imp (check t p1) (check t p2)
 check t (Not p)              = not (check t p)
 
 --------------------------Helper funcs
-convSet :: Set -> Set -> ([Set] -> [Set] -> [Set]) -> Set
-convSet (S a1) (S a2) op = S (a1 `op` a2)
+
+uniqueAdd :: Eq a => [a] -> [a] -> [a]
+uniqueAdd a1 a2 = a1 ++ [ e | e <- a2, not (e `elem` a1)]     
 
 mergeSet :: Set -> Set -> ([Set] -> [Set] -> [Set]) -> Set
 mergeSet s1@(S a1) s2@(S a2) op = f eq
@@ -79,11 +80,19 @@ claim1 n1 n2 = imp (n1 <= n2) (check tab (Sub (vonNeumann n1) (vonNeumann n2)))
 claim2 :: (Eq t, Num t, Enum t) => t -> Bool
 claim2 n = eval tab (vonNeumann n) == S [eval tab (vonNeumann s) | s <- [0..n-1]]
 
+card :: Set -> Int
+card (S a1) = length a1
+
+--Quality of life improvements
+chk :: PRED String -> Bool
+chk a = check tab a
+
+evl :: TERM String -> Set
+evl a = eval tab a
+
 --------------------------Testing 
---[(m0,{1,2,3})]
 tab :: Table String 
 tab = [("m0", S []), ("m1", S [S [S [S []]]]), ("m2", S [S [], S []])]
-
 
 a0 :: PRED [Char]
 a0 = (Elem Empty (Var "m2")) --true
@@ -91,8 +100,16 @@ a0 = (Elem Empty (Var "m2")) --true
 a1 :: PRED [Char]
 a1 = (Sub Empty (Var "m1")) --true
 
-chk :: PRED String -> Bool
-chk a = check tab a
+eval1 :: Set --returns empty because you take intersection \w empty
+eval1 = eval tab ((Sing (Empty) `U` (Var "m1")) `I` (Empty `U` (Empty `U` (Var "m0"))))
+
+
+cardCheck :: TERM String -> TERM String -> Bool
+cardCheck a b = (card (eval tab (a `U` b))) + (card (eval tab (a `I` b))) == 
+                (card (eval tab a)) + (card (eval tab b))
+
+
+
 
 --tautology
 t1 :: PRED String -> Bool
@@ -112,8 +129,32 @@ t4 a b = check tab ( (a `Implies` b) `Or` (b `Implies` a))
 
 --big test
 t5 :: PRED String -> PRED String -> Bool
-t5 a b = (t4 a b) && (t1 a) && (t1 b) && (not (t2 a))
+t5 a b = t4 a b && t1 a && t1 b && not (t2 a)
 
+--big test combined with von neumann
+t6 :: (Eq t, Num t) => t -> Bool
+t6 n = t5 a0 (Elem a b) && t5 a0 (Elem b a)
+    where a = vonNeumann n
+          b = vonNeumann (2*n)
 
+--cardinality test 1
+t7 :: (Eq t, Num t) => t -> Bool
+t7 n = cardCheck (vonNeumann n) (vonNeumann (2*n)) && cardCheck (vonNeumann (2*n)) (vonNeumann (n))
 
+--cardinaltiy test 2
+t8 :: Bool
+t8 = card (evl (Sing (Sing Empty))) == 1 && card (evl Empty) == 0
+
+t9 :: TERM v -> TERM v -> PRED v
+t9 a b = Implies (Elem (Empty) (a `U` b)) (Or (Elem Empty a) (Elem Empty b))
+
+t10 :: TERM v -> TERM v -> PRED v
+t10 a b = Implies (Or (Elem Empty a) (Elem Empty b)) (Elem Empty (a `U` b))
+
+--test of implies, elem, union.. -- tautology because of "Elem Empty x"
+t11 :: TERM String -> TERM String -> Bool
+t11 a b = chk (t9 a b `And` t10 a b)
+
+t12 :: (Num t, Eq t) => t -> Bool
+t12 n = t11 (vonNeumann n) (vonNeumann (n^2))
 
