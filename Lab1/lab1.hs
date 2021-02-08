@@ -8,7 +8,6 @@ data TERM v = Empty
             | Sing (TERM v)
             | (TERM v) `U` (TERM v)
             | (TERM v) `I` (TERM v)
-            --Potensmängd?
             | Var v
     deriving (Show)
 
@@ -24,15 +23,23 @@ type Env var dom = [(var,dom)]
 type Table v = Env v Set 
 
 newtype Set = S [Set]
-    deriving (Show, Eq)
+    deriving (Show)
 
+instance Eq Set where 
+    (==) = setEq
+
+--Sets are equal independent of order and eventual duplicates
+setEq :: Set -> Set -> Bool 
+setEq (S a1) (S a2) = null (s1 \\ s2) && null (s2 \\ s1)
+    where s1 = nub a1
+          s2 = nub a2
 
 --------------------------Part 2
 
 eval :: Eq v => Table v -> TERM v -> Set
 eval t Empty = S []
-eval t (Sing v) = S [ eval t v ]
-eval t (s1 `U` s2) = mergeSet (eval t s1) (eval t s2) (uniqueAdd)
+eval t (Sing v) = S [eval t v]
+eval t (s1 `U` s2) = mergeSet (eval t s1) (eval t s2) (++)
 eval t (s1 `I` s2) = mergeSet (eval t s1) (eval t s2) intersect
 eval t (Var v) = fromJust (lookup v t)
 
@@ -48,9 +55,6 @@ check t (Implies p1 p2)      = imp (check t p1) (check t p2)
 check t (Not p)              = not (check t p)
 
 --------------------------Helper funcs
-
-uniqueAdd :: Eq a => [a] -> [a] -> [a]
-uniqueAdd a1 a2 = a1 ++ [ e | e <- a2, not (e `elem` a1)]     
 
 mergeSet :: Set -> Set -> ([Set] -> [Set] -> [Set]) -> Set
 mergeSet s1@(S a1) s2@(S a2) op = f eq
@@ -69,7 +73,7 @@ imp _ _ = True
 
 vonNeumann :: (Eq t, Num t) => t -> TERM v
 vonNeumann 0 = Empty
-vonNeumann (n) = U (vonNeumann (n-1)) (Sing (vonNeumann (n-1)))
+vonNeumann n = U (vonNeumann (n-1)) (Sing (vonNeumann (n-1)))
 
 --If you have a neumann(n1) set and neumann(n2) set where n1 <= n2, this implies that
 --neumann(n1)  is a subset of neumann(n2).
@@ -81,7 +85,7 @@ claim2 :: (Eq t, Num t, Enum t) => t -> Bool
 claim2 n = eval tab (vonNeumann n) == S [eval tab (vonNeumann s) | s <- [0..n-1]]
 
 card :: Set -> Int
-card (S a1) = length a1
+card (S a1) = length (nub a1)
 
 --Quality of life improvements
 chk :: PRED String -> Bool
@@ -92,7 +96,7 @@ evl a = eval tab a
 
 --------------------------Testing 
 tab :: Table String 
-tab = [("m0", S []), ("m1", S [S [S [S []]]]), ("m2", S [S [], S []])]
+tab = [("m0", S []), ("m1", S [S [S [S []]], S [S []], S [S []], S [S[S[S[]]]]]), ("m2", S [S [S []], S [S[S[S[]]]]])]
 
 a0 :: PRED [Char]
 a0 = (Elem Empty (Var "m2")) --true
@@ -139,7 +143,7 @@ t6 n = t5 a0 (Elem a b) && t5 a0 (Elem b a)
 
 --cardinality test 1
 t7 :: (Eq t, Num t) => t -> Bool
-t7 n = cardCheck (vonNeumann n) (vonNeumann (2*n)) && cardCheck (vonNeumann (2*n)) (vonNeumann (n))
+t7 n = cardCheck (vonNeumann n) (vonNeumann (2*n)) && cardCheck (vonNeumann (2*n)) (vonNeumann n)
 
 --cardinaltiy test 2
 t8 :: Bool
@@ -157,4 +161,10 @@ t11 a b = chk (t9 a b `And` t10 a b)
 
 t12 :: (Num t, Eq t) => t -> Bool
 t12 n = t11 (vonNeumann n) (vonNeumann (n^2))
+
+--Intersection commutativity
+t13 :: Bool
+t13 = evl (Var "m1" `I` Var "m2") == evl (Var "m2" `I` Var "m1")
+t14 :: Bool
+t14 = evl (Var "m1" `U` Var "m2") == evl (Var "m2" `U` Var "m1")
 
